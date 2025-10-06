@@ -1,5 +1,4 @@
-# .github/workflows/ci.yml
-name: CI/CD Pipeline
+name: Full CI/CD Pipeline
 
 on:
   push:
@@ -8,34 +7,102 @@ on:
     branches: [main]
 
 jobs:
-  build-and-test:
+  # 1. Code Checkout
+  checkout:
+    name: Checkout Code
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Echo checkout success
+        run: echo "✅ Code checked out successfully"
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
+  # 2. Code Quality (Linting, Formatting)
+  lint:
+    name: Code Quality Check
+    runs-on: ubuntu-latest
+    needs: checkout
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Install dependencies
-      run: npm install
+      - name: Run linter (mock)
+        run: |
+          echo "🧹 Running code linter..."
+          # Replace with your linter (e.g., eslint, flake8)
+          echo "✅ Lint passed!"
 
-    - name: Run tests
-      run: npm test
+  # 3. Security Checks (SAST)
+  security:
+    name: Static Security Scan
+    runs-on: ubuntu-latest
+    needs: checkout
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
+      - name: Run security scan (mock)
+        run: |
+          echo "🔒 Running static security scan..."
+          # Replace with e.g., `npm audit`, `bandit`, `trivy fs .`
+          echo "✅ Security scan passed!"
+
+  # 4. Build
+  build:
+    name: Build Application
+    runs-on: ubuntu-latest
+    needs: [lint, security]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build app (mock)
+        run: |
+          echo "🏗️ Building the application..."
+          # Replace with: npm run build, make build, etc.
+          echo "✅ Build completed successfully!"
+
+  # 5. Unit Tests
+  test:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run tests (mock)
+        run: |
+          echo "🧪 Running unit tests..."
+          # Replace with: npm test, pytest, go test, etc.
+          echo "✅ All tests passed!"
+
+  # 6. Artifact Packaging
+  package:
+    name: Package Build Artifacts
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Package app (mock)
+        run: |
+          echo "📦 Packaging application..."
+          # Example: zip -r app.zip ./dist
+          echo "✅ Application packaged!"
+
+  # 7. Deployment (Staging or Production)
   deploy:
-    needs: build-and-test
+    name: Deploy to Environment
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-
+    needs: package
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Deploy (Example)
-      run: echo "Deploying your app..." 
-      # Replace this with real deploy command like:
-      # run: npm run deploy or scp files to a server
+      - name: Deploy app (mock)
+        run: |
+          echo "🚀 Deploying to production/staging..."
+          # Replace with real deployment command (e.g. ssh, kubectl, Vercel CLI)
+          echo "✅ Deployment successful!"
