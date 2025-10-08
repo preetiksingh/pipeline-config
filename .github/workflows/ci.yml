@@ -1,4 +1,4 @@
-name: CI - Dummy Project
+name: CI - Tangelo Project
 
 on:
   push:
