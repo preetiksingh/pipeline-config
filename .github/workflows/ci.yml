@@ -56,10 +56,10 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: ⚙️ Build project with Gradle (dummy)
-        uses: gradle/gradle-build-action@v3
-        with:
-          arguments: build --no-daemon
+     # - name: ⚙️ Build project with Gradle (dummy)
+      #  uses: gradle/gradle-build-action@v3
+       # with:
+        #  arguments: build --no-daemon
 
       - name: 🔐 Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
