@@ -1,108 +1,112 @@
-name: Full CI/CD Pipeline
+name: CI - Dummy Project
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    branches: [ "main" ]        
+    paths-ignore:
+      - 'README.md'
+      - '.github/workflows/ci-pipeline.yaml'
+
+permissions:
+  id-token: write     # for AWS OIDC
+  contents: read
+
+env:
+  AWS_REGION: us-west-2                               # 🔧 dummy region
+  ECR_REPO: dummy-repo-name                            # 🔧 dummy ECR repo name
+  AWS_ACCOUNT_ID: 123456789012                         # 🔧 dummy AWS account ID
 
 jobs:
-  # 1. Code Checkout
-  checkout:
-    name: Checkout Code
+  build-and-push:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Echo checkout success
-        run: echo "✅ Code checked out successfully"
 
-  # 2. Code Quality (Linting, Formatting)
-  lint:
-    name: Code Quality Check
-    runs-on: ubuntu-latest
-    needs: checkout
     steps:
-      - name: Checkout code
+      - name: 🔄 Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Run linter (mock)
+      - name: 🔢 Setup GitVersion
+        uses: GitTools/actions/gitversion/setup@v0.9.15
+        with:
+          versionSpec: 5.10.1
+
+      - name: 🔢 Determine version
+        id: gv
+        uses: GitTools/actions/gitversion/execute@v0.9.15
+
+      - name: 🧮 Compute tags (version + short SHA)
+        id: vars
         run: |
-          echo "🧹 Running code linter..."
-          # Replace with your linter (e.g., eslint, flake8)
-          echo "✅ Lint passed!"
+          SHORT_SHA="$(git rev-parse --short HEAD)"
+          if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            VERSION="${{ steps.gv.outputs.SemVer }}"
+          else
+            VERSION="${{ steps.gv.outputs.MajorMinorPatch }}.${{ steps.gv.outputs.CommitsSinceVersionSource }}${{ steps.gv.outputs.PreReleaseLabelWithDash }}"
+          fi
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "${VERSION}" > VERSION_FILE
+          echo "✅ Version computed: ${VERSION}"
+          echo "✅ Short SHA: ${SHORT_SHA}"
 
-  # 3. Security Checks (SAST)
-  security:
-    name: Static Security Scan
-    runs-on: ubuntu-latest
-    needs: checkout
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: ☕ Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-      - name: Run security scan (mock)
+      - name: ⚙️ Build project with Gradle (dummy)
+        uses: gradle/gradle-build-action@v3
+        with:
+          arguments: build --no-daemon
+
+      - name: 🔐 Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/DummyOIDCRole
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: 🔐 Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: 🐳 Build & Push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile                           # 🔧 adjust if needed
+          push: true
+          tags: |
+            ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPO }}:${{ steps.vars.outputs.version }}
+            ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPO }}:${{ steps.vars.outputs.short_sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.vars.outputs.version }}
+
+      - name: 🏷️ Push :latest tag (main only)
+        if: github.ref == 'refs/heads/main'
         run: |
-          echo "🔒 Running static security scan..."
-          # Replace with e.g., `npm audit`, `bandit`, `trivy fs .`
-          echo "✅ Security scan passed!"
+          echo "📦 Tagging image as :latest"
+          docker tag \
+            ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPO }}:${{ steps.vars.outputs.version }} \
+            ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPO }}:latest
 
-  # 4. Build
-  build:
-    name: Build Application
-    runs-on: ubuntu-latest
-    needs: [lint, security]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+          echo "📤 Pushing :latest image"
+          docker push ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPO }}:latest
 
-      - name: Build app (mock)
+      - name: 📦 Prepare deployment package
         run: |
-          echo "🏗️ Building the application..."
-          # Replace with: npm run build, make build, etc.
-          echo "✅ Build completed successfully!"
+          echo "📁 Preparing deployment-package directory"
+          mkdir -p deployment-package
+          cp -r helm deployment-package/ || true
+          cp -r terraform deployment-package/ || true
+          cp VERSION_FILE deployment-package/
+          tree -a deployment-package || true
 
-  # 5. Unit Tests
-  test:
-    name: Run Unit Tests
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Run tests (mock)
-        run: |
-          echo "🧪 Running unit tests..."
-          # Replace with: npm test, pytest, go test, etc.
-          echo "✅ All tests passed!"
-
-  # 6. Artifact Packaging
-  package:
-    name: Package Build Artifacts
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Package app (mock)
-        run: |
-          echo "📦 Packaging application..."
-          # Example: zip -r app.zip ./dist
-          echo "✅ Application packaged!"
-
-  # 7. Deployment (Staging or Production)
-  deploy:
-    name: Deploy to Environment
-    runs-on: ubuntu-latest
-    needs: package
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Deploy app (mock)
-        run: |
-          echo "🚀 Deploying to production/staging..."
-          # Replace with real deployment command (e.g. ssh, kubectl, Vercel CLI)
-          echo "✅ Deployment successful!"
+      - name: ⬆️ Upload deployment-package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-package
+          path: deployment-package
+          retention-days: 14
